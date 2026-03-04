@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:health_tracking/views/profile/profile_page.dart';
 import '../chart/chart_page.dart';
 import '../footer/main_footer.dart';
 import '../header/main_header.dart';
@@ -76,7 +77,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 // Chuyển sang trang profile
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SettingsPage()),
+                  MaterialPageRoute(builder: (context) => const ProfilePage()),
                 );
               },
             ),
