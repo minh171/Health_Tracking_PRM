@@ -31,10 +31,19 @@ dependencies:
   flutter:
     sdk: flutter
   fl_chart: ^0.70.0
+  # Thư viện SQLite để làm việc với database
+  sqflite: ^2.3.3+1
+
+  # Thư viện hỗ trợ xử lý đường dẫn file trên Android/iOS
+  path: ^1.9.0
+
+  # (Tùy chọn) Thư viện giúp lấy đường dẫn thư mục hệ thống (như Documents)
+  path_provider: ^2.1.2
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
