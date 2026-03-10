@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../data/models/user_profile.dart';
+import '../../viewmodels/alert_setting_vm.dart';
+import '../../viewmodels/heath_record_vm.dart';
+import '../../viewmodels/login_vm.dart';
+import '../../viewmodels/profile_vm.dart';
 
-/// trang chỉnh sửa chỉ số cơ bản
 class EditBasicInfoModal extends StatefulWidget {
   const EditBasicInfoModal({super.key});
 
@@ -9,8 +15,24 @@ class EditBasicInfoModal extends StatefulWidget {
 }
 
 class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
-  // Trạng thái cho các checkbox
-  Map<String, bool> conditions = {
+  final _formKey = GlobalKey<FormState>();
+
+  // Controllers
+  final TextEditingController _dobController = TextEditingController();
+  final TextEditingController _heightController = TextEditingController();
+  final TextEditingController _weightController = TextEditingController();
+
+  String? _selectedGender;
+
+  // Mapping bệnh lý
+  final Map<String, int> _diseaseMap = {
+    'Tăng huyết áp': 1,
+    'Tiểu đường': 2,
+    'Bệnh tim mạch': 3,
+    'Bệnh hô hấp': 4,
+  };
+
+  final Map<String, bool> _conditions = {
     "Tăng huyết áp": false,
     "Tiểu đường": false,
     "Bệnh tim mạch": false,
@@ -18,119 +40,247 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    // Đổ dữ liệu cũ vào form ngay khi khởi tạo
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCurrentData();
+    });
+  }
+
+  void _loadCurrentData() {
+    final profileVM = context.read<ProfileViewModel>();
+    final profile = profileVM.userProfile;
+
+    if (profile != null) {
+      setState(() {
+        _dobController.text = profile.dob ?? "";
+        _selectedGender = profile.gender;
+        _heightController.text = profile.height?.toInt().toString() ?? "";
+        _weightController.text = profile.weight?.toString() ?? "";
+
+        // Đổ dữ liệu bệnh lý (nếu chuỗi bệnh nền chứa tên bệnh nào thì tích checkbox đó)
+        String currentDiseases = profileVM.getDiseasesDisplay();
+        _conditions.forEach((key, value) {
+          if (currentDiseases.contains(key)) {
+            _conditions[key] = true;
+          }
+        });
+      });
+    }
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    DateTime initialDate = DateTime(2000);
+    if (_dobController.text.isNotEmpty) {
+      try {
+        initialDate = DateFormat('dd/MM/yyyy').parse(_dobController.text);
+      } catch (_) {}
+    }
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1920),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _dobController.text = DateFormat('dd/MM/yyyy').format(picked);
+      });
+    }
+  }
+
+  void _handleSave() async {
+    if (_formKey.currentState!.validate()) {
+      final loginVM = context.read<LoginViewModel>();
+      final healthVM = context.read<HealthRecordViewModel>();
+      final profileVM = context.read<ProfileViewModel>();
+      final alertVM = context.read<AlertSettingViewModel>();
+
+      final accountId = loginVM.currentAccount?.id;
+
+      if (accountId == null) return;
+
+      // Lấy danh sách bệnh được chọn
+      List<int> selectedIds = [];
+      _conditions.forEach((key, value) {
+        if (value) selectedIds.add(_diseaseMap[key]!);
+      });
+
+      // CẬP NHẬT TẠI ĐÂY: Lấy tên hiện tại từ ProfileViewModel để không bị mất
+      final currentFullName = profileVM.userProfile?.fullName;
+
+      final profile = UserProfile(
+        accountId: accountId,
+        fullName: currentFullName, // Đảm bảo tên không bị ghi đè thành null
+        dob: _dobController.text,
+        gender: _selectedGender,
+        height: double.tryParse(_heightController.text),
+        weight: double.tryParse(_weightController.text),
+      );
+
+      // 1. Lưu thông tin cơ bản vào Database
+      bool success = await healthVM.handleSaveBasicInfo(
+        accountId: accountId,
+        profile: profile,
+        diseaseIds: selectedIds,
+      );
+
+      if (success && mounted) {
+        // 2. Tính toán lại ngưỡng cảnh báo dựa trên chỉ số mới (Tuổi, Cân nặng, Bệnh nền)
+        // Chúng ta truyền đối tượng profile có đầy đủ tên vào đây
+        await alertVM.resetToDefault(accountId, profile, selectedIds);
+
+        // 3. QUAN TRỌNG: Nạp lại Profile từ Server để đảm bảo mọi thứ đồng bộ (Tên, Bệnh nền, Chỉ số)
+        await profileVM.fetchProfile(accountId);
+
+        if (mounted) {
+          Navigator.pop(context);
+
+          // 4. Thông báo thành công
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Thông tin và ngưỡng cảnh báo đã được cập nhật"),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       backgroundColor: Colors.white,
-      child: Stack( // Sử dụng Stack để nút X nằm ở góc tuyệt đối
+      child: Stack(
         children: [
           SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- TIÊU ĐỀ ---
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 24.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Center(
                       child: Text(
                         'Chỉnh sửa chỉ số cơ bản',
-                        textAlign: TextAlign.center,
                         style: TextStyle(
                             color: Color(0xFF379AE6),
                             fontSize: 18,
                             fontWeight: FontWeight.bold),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  const Divider(color: Colors.grey),
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
+                    const Divider(),
+                    const SizedBox(height: 10),
 
-                  // 1. Ngày sinh - CÓ DẤU *
-                  _buildLabel("1. Ngày sinh"),
-                  _buildTextField("Ngày/tháng/năm"),
+                    _buildLabel("1. Ngày sinh"),
+                    TextFormField(
+                      controller: _dobController,
+                      readOnly: true,
+                      onTap: () => _selectDate(context),
+                      decoration: _inputStyle("Ngày/tháng/năm"),
+                      validator: (v) => (v == null || v.isEmpty) ? "Vui lòng chọn ngày sinh" : null,
+                    ),
 
-                  const SizedBox(height: 15),
+                    const SizedBox(height: 15),
 
-                  // 2. Giới tính & 3. Chiều cao - CÓ DẤU *
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildLabel("2. Giới tính"),
-                            _buildTextField("Nam/Nữ"),
-                          ],
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildLabel("2. Giới tính"),
+                              DropdownButtonFormField<String>(
+                                value: _selectedGender,
+                                dropdownColor: Colors.white,
+                                items: ["Nam", "Nữ"].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                                onChanged: (v) => setState(() => _selectedGender = v),
+                                decoration: _inputStyle("Chọn"),
+                                validator: (v) => v == null ? "Cần chọn" : null,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildLabel("3. Chiều cao (cm)"),
-                            _buildTextField("170"),
-                          ],
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildLabel("3. Chiều cao (cm)"),
+                              TextFormField(
+                                controller: _heightController,
+                                keyboardType: TextInputType.number,
+                                decoration: _inputStyle("VD: 170"),
+                                validator: (v) {
+                                  if (v == null || v.isEmpty) return "Cần nhập";
+                                  if (int.tryParse(v) == null || int.parse(v) <= 0) return "Phải > 0";
+                                  return null;
+                                },
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
 
-                  const SizedBox(height: 15),
+                    const SizedBox(height: 15),
 
-                  // 4. Cân nặng - CÓ DẤU *
-                  _buildLabel("4. Cân nặng (kg)"),
-                  _buildTextField("60"),
+                    _buildLabel("4. Cân nặng (kg)"),
+                    TextFormField(
+                      controller: _weightController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: _inputStyle("VD: 60.5"),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return "Vui lòng nhập cân nặng";
+                        if (double.tryParse(v) == null || double.parse(v) <= 0) return "Phải là số dương";
+                        return null;
+                      },
+                    ),
 
-                  const SizedBox(height: 15),
+                    const SizedBox(height: 15),
 
-                  // 5. Câu hỏi tình trạng - KHÔNG CÓ DẤU *
-                  _buildLabel("5. Bạn có tình trạng nào sau đây không?", isRequired: false),
-                  const SizedBox(height: 5),
-                  ...conditions.keys.map((String key) {
-                    return _buildCheckboxRow(key);
-                  }).toList(),
+                    _buildLabel("5. Bạn có tình trạng nào sau đây không?", isRequired: false),
+                    ..._conditions.keys.map((key) => _buildCheckboxRow(key)).toList(),
 
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                  // Nút Hủy và Lưu
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.grey.shade300),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Hủy", style: TextStyle(color: Colors.grey)),
                         ),
-                        child: const Text("Hủy", style: TextStyle(color: Colors.black)),
-                      ),
-                      const SizedBox(width: 10),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3C83F6),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        const SizedBox(width: 10),
+                        ElevatedButton(
+                          onPressed: _handleSave,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF3C83F6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text("Lưu thay đổi", style: TextStyle(color: Colors.white)),
                         ),
-                        child: const Text("Lưu", style: TextStyle(color: Colors.white)),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-
-          // --- NÚT X ĐỊNH VỊ GÓC TRÊN PHẢI ---
           Positioned(
             right: 4,
             top: 4,
             child: IconButton(
-              icon: const Icon(Icons.close, color: Colors.grey, size: 22),
+              icon: const Icon(Icons.close, color: Colors.grey),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -139,45 +289,27 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
     );
   }
 
-  // Hàm tạo tiêu đề hỗ trợ dấu * đỏ
+  InputDecoration _inputStyle(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+    );
+  }
+
   Widget _buildLabel(String text, {bool isRequired = true}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
       child: RichText(
         text: TextSpan(
           text: text,
-          style: const TextStyle(
-              fontSize: 13,
-              color: Colors.black,
-              fontWeight: FontWeight.w500),
-          children: [
-            if (isRequired)
-              const TextSpan(
-                text: ' *',
-                style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField(String hint) {
-    return SizedBox(
-      height: 40,
-      child: TextField(
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey.shade300),
-          ),
+          style: const TextStyle(fontSize: 13, color: Colors.black, fontWeight: FontWeight.w500),
+          children: [if (isRequired) const TextSpan(text: ' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))],
         ),
       ),
     );
@@ -188,19 +320,12 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
       height: 35,
       child: Row(
         children: [
-          Transform.scale(
-            scale: 0.9,
-            child: Checkbox(
-              value: conditions[title],
-              activeColor: const Color(0xFF2028BD),
-              onChanged: (bool? value) {
-                setState(() {
-                  conditions[title] = value!;
-                });
-              },
-            ),
+          Checkbox(
+            value: _conditions[title],
+            activeColor: const Color(0xFF379AE6),
+            onChanged: (v) => setState(() => _conditions[title] = v!),
           ),
-          Text(title, style: const TextStyle(fontSize: 13, color: Colors.black)),
+          Text(title, style: const TextStyle(fontSize: 13)),
         ],
       ),
     );

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Widget này chứa logic hiển thị ảnh đại diện và tên/ID bên dưới.
+/// Widget hiển thị ảnh đại diện từ Assets và thông tin người dùng
 class ProfileAvatar extends StatelessWidget {
   final String name;
   final String id;
@@ -31,11 +31,21 @@ class ProfileAvatar extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(60),
-            child: Image.network(
+            // CẬP NHẬT TẠI ĐÂY: Chuyển từ Image.network sang Image.asset
+            child: Image.asset(
               imageUrl,
               width: 120,
               height: 120,
               fit: BoxFit.cover,
+              // Xử lý lỗi nếu không tìm thấy file ảnh trong assets
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 120,
+                  height: 120,
+                  color: Colors.grey.shade200,
+                  child: const Icon(Icons.person, size: 80, color: Colors.grey),
+                );
+              },
             ),
           ),
         ),
@@ -48,8 +58,9 @@ class ProfileAvatar extends StatelessWidget {
               color: Color(0xFF323842)
           ),
         ),
+        const SizedBox(height: 4),
         Text(
-          "ID: $id",
+          id, // id đã được format "ID: ..." từ ProfilePage truyền sang
           style: const TextStyle(color: Colors.grey, fontSize: 14),
         ),
       ],

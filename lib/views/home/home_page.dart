@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../viewmodels/login_vm.dart';
+import '../../viewmodels/home_vm.dart';
+
 import '../header/main_header.dart';
 import '../footer/main_footer.dart';
 import '../chart/chart_page.dart';
@@ -16,6 +20,22 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    // Sử dụng addPostFrameCallback để thực hiện việc chuyển dữ liệu giữa 2 VM sau khi frame đầu tiên build xong
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 1. Lấy tên từ LoginViewModel (đã được map từ DB)
+      final loginVM = Provider.of<LoginViewModel>(context, listen: false);
+      final fullName = loginVM.tempFullName;
+
+      // 2. Cập nhật vào HomeViewModel
+      if (fullName != null) {
+        Provider.of<HomeViewModel>(context, listen: false).setUserName(fullName);
+      }
+    });
+  }
+
   void _navigateTo(Widget page) {
     Navigator.pushReplacement(
       context,
@@ -25,9 +45,13 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // 3. Lắng nghe HomeViewModel để lấy tên hiển thị
+    final homeVM = Provider.of<HomeViewModel>(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: const MainHeader(subTitle: 'Xin chào chủ nhân !!'),
+      // 4. Cập nhật subTitle từ "chủ nhân" sang tên người dùng thực tế
+      appBar: MainHeader(subTitle: 'Xin chào, ${homeVM.userName} !!'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -46,13 +70,13 @@ class _HomePageState extends State<HomePage> {
               crossAxisCount: 2,
               mainAxisSpacing: 15,
               crossAxisSpacing: 15,
-              childAspectRatio: 1.2, // Chỉnh lại tỉ lệ để không bị tràn khi thêm dòng
+              childAspectRatio: 1.2,
               children: const [
                 MenuCard(
                   title: "Huyết áp",
                   value: "120/80",
                   unit: "mmHg",
-                  heartRate: "72bpm", // Chỉ số nhịp tim riêng cho huyết áp
+                  heartRate: "72bpm",
                   time: "22:32 30/01/2026",
                   icon: Icons.favorite,
                   color: Color(0xFFFFE8E8),
@@ -90,11 +114,10 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 30),
             const Text("Lời khuyên từ chuyên gia",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF565D6D))),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF565D6D))),
 
             const SizedBox(height: 15),
 
-            // 4 Lời khuyên cho 4 chỉ số
             const HealthTipCard(
               content: "Huyết áp của bạn đang ở mức lý tưởng. Hãy duy trì chế độ ăn ít muối và tập thể dục đều đặn.",
               gradientColors: [Color(0xFFEF5350), Color(0xFFC62828)],

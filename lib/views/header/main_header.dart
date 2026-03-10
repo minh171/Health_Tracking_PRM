@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../home/home_page.dart'; // Đảm bảo import đúng đường dẫn
-import '../profile/profile_page.dart'; // Giả sử bạn có trang này
+import 'package:provider/provider.dart';
+import '../../viewmodels/home_vm.dart';
+import '../home/home_page.dart';
+import '../profile/profile_page.dart';
 
 class MainHeader extends StatelessWidget implements PreferredSizeWidget {
   final String subTitle;
@@ -12,6 +14,9 @@ class MainHeader extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final homeVM = context.watch<HomeViewModel>();
+    final firstLetter = homeVM.userName.isNotEmpty ? homeVM.userName[0].toUpperCase() : 'U';
+
     return Column(
       children: [
         AppBar(
@@ -19,13 +24,12 @@ class MainHeader extends StatelessWidget implements PreferredSizeWidget {
           elevation: 0,
           surfaceTintColor: Colors.transparent,
           leadingWidth: 90,
-          // 1. CLICK VÀO LOGO VỀ HOMEPAGE
           leading: GestureDetector(
             onTap: () {
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (context) => const HomePage()),
-                    (route) => false, // Xóa hết các trang trước đó trong stack
+                    (route) => false,
               );
             },
             child: Padding(
@@ -43,7 +47,6 @@ class MainHeader extends StatelessWidget implements PreferredSizeWidget {
           ),
           centerTitle: true,
           actions: [
-            // 2. CLICK VÀO AVATAR TỚI PROFILE
             GestureDetector(
               onTap: () {
                 Navigator.push(
@@ -51,13 +54,40 @@ class MainHeader extends StatelessWidget implements PreferredSizeWidget {
                   MaterialPageRoute(builder: (context) => const ProfilePage()),
                 );
               },
-              child: const Padding(
-                padding: EdgeInsets.only(right: 15),
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Color(0xFF1A237E),
-                  child: Text('A', style: TextStyle(color: Colors.white)),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 15),
+                // --- THAY THẾ CIRCLEAVATAR ĐỂ PHÓNG TO VÀ XÓA NỀN ---
+                child: Container(
+                  width: 45, // Tăng kích thước từ 36 lên 45
+                  height: 45,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.transparent, // Đảm bảo nền trong suốt
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22.5),
+                    child: Image.asset(
+                      'assets/avatar_default.png',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        // Trường hợp lỗi ảnh thì mới hiện nền màu và chữ cái
+                        return Container(
+                          color: const Color(0xFF379AE6),
+                          alignment: Alignment.center,
+                          child: Text(
+                            firstLetter,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
+                // ------------------------------------------------
               ),
             ),
           ],

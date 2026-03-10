@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
-/// File này dùng để bọc các nhóm như "Huyết áp", "Đường huyết"
-/// bao gồm tiêu đề, nút khôi phục và các ô nhập liệu.
 class AlertSectionGroup extends StatelessWidget {
   final String title;
   final String unitLabel;
   final List<Widget> children;
+  final VoidCallback? onReset; // Thêm callback này
 
   const AlertSectionGroup({
     super.key,
     required this.title,
     required this.unitLabel,
     required this.children,
+    this.onReset, // Truyền qua constructor
   });
 
   @override
@@ -19,7 +19,6 @@ class AlertSectionGroup extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Hàng tiêu đề: Tiêu đề bên trái - Nút khôi phục bên phải
         Padding(
           padding: const EdgeInsets.only(top: 16),
           child: Row(
@@ -34,12 +33,10 @@ class AlertSectionGroup extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              // Nút Khôi phục mặc định (Chỉ hiển thị khi là nhóm Huyết Áp)
-              if (title == "Huyết Áp")
+              // Hiển thị nút khôi phục nếu có truyền hàm xử lý
+              if (onReset != null)
                 GestureDetector(
-                  onTap: () {
-                    // Logic khôi phục mặc định của bạn ở đây
-                  },
+                  onTap: onReset, // Gọi hàm show dialog ở trang cha
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
@@ -60,13 +57,11 @@ class AlertSectionGroup extends StatelessWidget {
           ),
         ),
 
-        // Đường kẻ xám dưới tiêu đề
         const Padding(
           padding: EdgeInsets.only(bottom: 8, top: 4),
           child: Divider(color: Colors.grey, thickness: 0.8),
         ),
 
-        // Nhãn ngưỡng (ví dụ: Ngưỡng cảnh báo (mmHg))
         Text(
           unitLabel,
           style: const TextStyle(
@@ -75,13 +70,9 @@ class AlertSectionGroup extends StatelessWidget {
               fontWeight: FontWeight.w500
           ),
         ),
-
         const SizedBox(height: 10),
-
-        // Các ô nhập liệu (ThresholdInputField)
         ...children,
-
-        const SizedBox(height: 8), // Khoảng cách đệm cuối mỗi nhóm
+        const SizedBox(height: 8),
       ],
     );
   }

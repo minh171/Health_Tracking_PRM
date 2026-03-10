@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-
+import 'package:provider/provider.dart';
+import '../../viewmodels/heath_record_vm.dart';
+import '../../viewmodels/login_vm.dart';
 import '../chart/chart_page.dart';
 import '../footer/main_footer.dart';
 import '../header/main_header.dart';
 import '../home/home_page.dart';
 import '../notification/notification_page.dart';
 import '../setting/settings_page.dart';
+import 'basic_info_modal.dart';
 import 'health_record_card.dart';
 import 'add_record_modal.dart';
-
 
 class HealthRecordPage extends StatefulWidget {
   const HealthRecordPage({super.key});
@@ -18,174 +20,241 @@ class HealthRecordPage extends StatefulWidget {
 }
 
 class _HealthRecordPageState extends State<HealthRecordPage> {
-  String selectedValue = 'Huyết Áp';
-  String selectedSort = 'Mới nhất'; // Trạng thái cho bộ lọc thời gian
-  int _selectedIndex = 1;
+  String selectedValue = 'Huyết áp';
+  String selectedSort = 'Mới nhất';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initData();
+    });
+  }
+
+  Future<void> _initData() async {
+    final loginVM = context.read<LoginViewModel>();
+    final healthVM = context.read<HealthRecordViewModel>();
+    final accountId = loginVM.currentAccount?.id;
+
+    if (accountId != null) {
+      await healthVM.checkRequirement(
+          accountId,
+          type: selectedValue,
+          descending: selectedSort == 'Mới nhất'
+      );
+    }
+  }
+
+  void _onTypeChanged(String? val) {
+    if (val == null) return;
+    setState(() => selectedValue = val);
+    _triggerFetch();
+  }
+
+  void _onSortChanged(String? val) {
+    if (val == null) return;
+    setState(() => selectedSort = val);
+    _triggerFetch();
+  }
+
+  void _triggerFetch() {
+    final loginVM = context.read<LoginViewModel>();
+    final healthVM = context.read<HealthRecordViewModel>();
+    if (loginVM.currentAccount?.id != null) {
+      healthVM.fetchRecords(
+        loginVM.currentAccount!.id!,
+        selectedValue,
+        descending: selectedSort == 'Mới nhất',
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final healthVM = context.watch<HealthRecordViewModel>();
+    final isLoading = healthVM.isLoading;
+    final needsInfo = healthVM.needsBasicInfo;
+    final records = healthVM.records;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: const MainHeader(subTitle: "Bản ghi sức khỏe"),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              // Hàng chứa 2 bộ lọc
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildSortFilter(), // Filter thời gian (Mới nhất/Cũ nhất)
-                  _buildDropdown(),   // Dropdown chọn loại chỉ số
-                ],
-              ),
-              const SizedBox(height: 16),
+      body: Stack(
+        children: [
+          isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: ConstrainedBox(
+                  // Đảm bảo nội dung ít nhất phải cao bằng màn hình để Center hoạt động
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        // 1. Bộ lọc luôn nằm trên cùng
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildSortFilter(),
+                            _buildDropdown(),
+                          ],
+                        ),
 
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.85,
+                        // 2. Phần nội dung chính (Danh sách hoặc Trạng thái trống)
+                        records.isEmpty
+                            ? _buildEmptyState(constraints.maxHeight)
+                            : Column(
+                          children: [
+                            const SizedBox(height: 16),
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                childAspectRatio: 0.82,
+                              ),
+                              itemCount: records.length,
+                              itemBuilder: (context, index) {
+                                return _renderHealthCardFromDB(records[index]);
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 80),
+                      ],
+                    ),
+                  ),
                 ),
-                itemCount: 8,
-                itemBuilder: (context, index) {
-                  if (selectedValue == 'Huyết Áp') {
-                    return const HealthRecordCard(
-                      icon: Icons.favorite,
-                      title: 'Huyết áp',
-                      value: '120/80',
-                      unit: 'mmHg',
-                      note: 'Nhịp tim: 72bpm',
-                      time: '22:32 30/01/2026',
-                    );
-                  } else if (selectedValue == 'Đường Huyết') {
-                    return const HealthRecordCard(
-                      icon: Icons.bloodtype_outlined,
-                      title: 'Đường huyết',
-                      value: '100',
-                      unit: 'mg/dL',
-                      note: 'Lúc đói',
-                      time: '22:32 30/01/2026',
-                    );
-                  } else if (selectedValue == 'Cân nặng') {
-                    return const HealthRecordCard(
-                      icon: Icons.balance,
-                      title: 'Cân nặng',
-                      value: '70',
-                      unit: 'kg',
-                      note: 'Đo trước khi ăn sáng',
-                      time: '22:32 30/01/2026',
-                    );
-                  } else {
-                    return const HealthRecordCard(
-                      icon: Icons.opacity,
-                      title: 'SpO2',
-                      value: '85',
-                      unit: '%',
-                      note: 'Đo trước khi ngủ',
-                      time: '22:32 30/01/2026',
-                    );
-                  }
-                },
-              ),
-              const SizedBox(height: 80),
-            ],
+              );
+            },
           ),
-        ),
-      ),
 
-      floatingActionButton: FloatingActionButton(
+          if (needsInfo && !isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              width: double.infinity,
+              height: double.infinity,
+              child: const Center(child: BasicInfoModal()),
+            ),
+        ],
+      ),
+      floatingActionButton: needsInfo ? null : FloatingActionButton(
         onPressed: () => _showAddRecordSheet(context),
         backgroundColor: const Color(0xFF3C83F6),
         child: const Icon(Icons.add, color: Colors.white, size: 30),
       ),
-
       bottomNavigationBar: MainFooter(
         currentIndex: 1,
         onTap: (index) {
           if (index == 1) return;
-          Widget nextPage;
-          switch (index) {
-            case 0: nextPage = const HomePage(); break;
-            case 1: nextPage = const HealthRecordPage(); break;
-            case 2: nextPage = const ChartPage(); break;
-            case 3: nextPage = const NotificationPage(); break;
-            case 4: nextPage = const SettingsPage(); break;
-            default: nextPage = const HomePage();
-          }
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => nextPage),
-          );
+          _navigateTo(index);
         },
       ),
     );
   }
 
-  // Widget cho bộ lọc Sắp xếp thời gian
+  /// Hàm Build Empty State với logic căn giữa theo chiều cao màn hình
+  Widget _buildEmptyState(double availableHeight) {
+    return Container(
+      // Trừ đi khoảng 150px cho Header và Dropdown để icon nằm đúng trọng tâm màn hình
+      constraints: BoxConstraints(minHeight: availableHeight - 150),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.description_outlined, size: 100, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              "Chưa có bản ghi $selectedValue nào",
+              style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "Dữ liệu đo sẽ xuất hiện tại đây.\nNhấn nút (+) để bắt đầu!",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _renderHealthCardFromDB(Map<String, dynamic> data) {
+    String displayValue = data['value_1'].toString();
+    if (data['value_2'] != null && data['value_2'] != 0) {
+      displayValue = "${data['value_1'].toInt()}/${data['value_2'].toInt()}";
+    }
+
+    return HealthRecordCard(
+      icon: _getIconForType(data['type']),
+      title: data['type'],
+      value: displayValue,
+      unit: data['unit'] ?? "",
+      note: data['note'] ?? "Không có ghi chú",
+      time: data['measured_at'] ?? "N/A",
+    );
+  }
+
+  IconData _getIconForType(String type) {
+    switch (type) {
+      case 'Huyết áp': return Icons.favorite;
+      case 'Đường huyết': return Icons.bloodtype;
+      case 'Cân nặng': return Icons.balance;
+      default: return Icons.opacity;
+    }
+  }
+
   Widget _buildSortFilter() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       height: 45,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: selectedSort,
           icon: const Icon(Icons.swap_vert, color: Colors.blue, size: 20),
-          dropdownColor: Colors.white,
-          style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
-          items: ['Mới nhất', 'Cũ nhất']
-              .map((val) => DropdownMenuItem(
-            value: val,
-            child: Text(val),
-          ))
-              .toList(),
-          onChanged: (val) => setState(() => selectedSort = val!),
+          items: ['Mới nhất', 'Cũ nhất'].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+          onChanged: _onSortChanged,
         ),
       ),
     );
   }
 
-  // Widget chọn Loại chỉ số (Giữ nguyên logic cũ nhưng bọc trong Row)
   Widget _buildDropdown() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       height: 45,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: selectedValue,
-          dropdownColor: Colors.white,
-          style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
           icon: const Icon(Icons.filter_list, color: Colors.blue, size: 20),
-          items: ['Huyết Áp', 'Đường Huyết', 'Cân nặng', 'SpO2']
-              .map((val) => DropdownMenuItem(value: val, child: Text(val)))
-              .toList(),
-          onChanged: (val) => setState(() => selectedValue = val!),
+          items: ['Huyết áp', 'Đường huyết', 'Cân nặng', 'SpO2'].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+          onChanged: _onTypeChanged,
         ),
       ),
     );
   }
 
+  void _navigateTo(int index) {
+    Widget nextPage;
+    switch (index) {
+      case 0: nextPage = const HomePage(); break;
+      case 2: nextPage = const ChartPage(); break;
+      case 3: nextPage = const NotificationPage(); break;
+      case 4: nextPage = const SettingsPage(); break;
+      default: nextPage = const HomePage();
+    }
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => nextPage));
+  }
+
   void _showAddRecordSheet(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return const ModalAddRecord();
-      },
-    );
+    showDialog(context: context, builder: (context) => const ModalAddRecord());
   }
 }

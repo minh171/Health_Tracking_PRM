@@ -1,17 +1,32 @@
-
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // Thêm provider
+import '../../viewmodels/login_vm.dart';
+import '../../viewmodels/profile_vm.dart'; // Import ProfileViewModel
 import 'edit_basic_info_modal.dart';
 
-/// card chỉ số cơ bản
 class BasicInfoCard extends StatelessWidget {
   const BasicInfoCard({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final loginVM = context.read<LoginViewModel>();
+    final profileVM = context.watch<ProfileViewModel>();
+    final profile = profileVM.userProfile;
+
+    // Tự động load nếu chưa có dữ liệu (Lazy Loading)
+    if (profile == null && !profileVM.isLoading) {
+      final accountId = loginVM.currentAccount?.id;
+      if (accountId != null) {
+        // Sử dụng Future.microtask để tránh lỗi "setState() or markNeedsBuild() called during build"
+        Future.microtask(() => profileVM.fetchProfile(accountId));
+      }
+    }
+
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Phần nhãn bên trái
           Expanded(
             flex: 2,
             child: Container(
@@ -34,6 +49,8 @@ class BasicInfoCard extends StatelessWidget {
               ),
             ),
           ),
+
+          // Phần nội dung bên phải
           Expanded(
             flex: 5,
             child: Container(
@@ -51,13 +68,39 @@ class BasicInfoCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildInfoText("Tuổi: 18"),
-                      _buildInfoText("Giới tính: Nam"),
-                      _buildInfoText("Chiều cao: 170cm"),
-                      _buildInfoText("Tình trạng: Tiểu đường"),
-                      _buildInfoText("Cân nặng: 60 kg"),
+                      // 1. Tính tuổi từ chuỗi dob (giả sử định dạng yyyy-MM-dd)
+                      _buildInfoText("Tuổi: ${_calculateAge(profile?.dob)}"),
+
+                      // 2. Giới tính
+                      _buildInfoText("Giới tính: ${profileVM.getDisplayValue(profile?.gender)}"),
+
+                      // 3. Chiều cao
+                      _buildInfoText("Chiều cao: ${profileVM.getDisplayValue(profile?.height?.toInt().toString(), unit: " cm")}"),
+
+                      // 4. Cân nặng
+                      _buildInfoText("Cân nặng: ${profileVM.getDisplayValue(profile?.weight, unit: " kg")}"),
+
+                      // 5. Tình trạng (Bệnh nền) - Dùng Row + Expanded để xuống dòng
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Tình trạng: ", style: TextStyle(color: Colors.black, fontSize: 13)),
+                          Expanded(
+                            child: Text(
+                              profileVM.getDiseasesDisplay(), // Hàm lấy danh sách bệnh đã nối chuỗi
+                              style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 13,
+                              ),
+                              softWrap: true, // Tự động xuống dòng
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
+
+                  // Nút Chỉnh sửa
                   Positioned(
                     top: 0,
                     right: 0,
@@ -72,7 +115,6 @@ class BasicInfoCard extends StatelessWidget {
                       child: const Icon(Icons.edit, color: Color(0xFF379AE6), size: 20),
                     ),
                   ),
-                  // Nút Khôi phục mặc định đã được xóa khỏi đây
                 ],
               ),
             ),
@@ -82,10 +124,54 @@ class BasicInfoCard extends StatelessWidget {
     );
   }
 
+  String _calculateAge(String? dob) {
+    if (dob == null || dob.isEmpty || dob == "Chưa có") return "N/A";
+
+    try {
+      DateTime birthDate;
+
+      // Kiểm tra nếu chuỗi có định dạng DD/MM/YYYY
+      if (dob.contains('/')) {
+        List<String> parts = dob.split('/');
+        if (parts.length == 3) {
+          // Chuyển từ DD/MM/YYYY sang YYYY-MM-DD để parse
+          int day = int.parse(parts[0]);
+          int month = int.parse(parts[1]);
+          int year = int.parse(parts[2]);
+          birthDate = DateTime(year, month, day);
+        } else {
+          return "N/A";
+        }
+      } else {
+        // Nếu là định dạng chuẩn YYYY-MM-DD
+        birthDate = DateTime.parse(dob);
+      }
+
+      DateTime today = DateTime.now();
+      int age = today.year - birthDate.year;
+
+      // Kiểm tra xem đã đến sinh nhật năm nay chưa
+      if (today.month < birthDate.month ||
+          (today.month == birthDate.month && today.day < birthDate.day)) {
+        age--;
+      }
+
+      return age < 0 ? "0" : age.toString();
+    } catch (e) {
+      debugPrint("Lỗi tính tuổi với chuỗi '$dob': $e");
+      return "N/A";
+    }
+  }
+
   Widget _buildInfoText(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Text(text, style: const TextStyle(color: Colors.black, fontSize: 13)),
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        text,
+        style: const TextStyle(color: Colors.black, fontSize: 13),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 }

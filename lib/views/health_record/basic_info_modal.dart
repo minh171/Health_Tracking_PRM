@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../data/models/user_profile.dart';
+import '../../viewmodels/heath_record_vm.dart';
+import '../../viewmodels/login_vm.dart';
 
-/// trang thiết lập chỉ số sức khỏe ban đầu trước khi được tạo bản ghi skhoe
 class BasicInfoModal extends StatefulWidget {
   const BasicInfoModal({super.key});
 
@@ -9,136 +13,227 @@ class BasicInfoModal extends StatefulWidget {
 }
 
 class _BasicInfoModalState extends State<BasicInfoModal> {
-  // Trạng thái cho các checkbox
-  Map<String, bool> conditions = {
+  final _formKey = GlobalKey<FormState>();
+
+  // Controllers
+  final TextEditingController _dobController = TextEditingController();
+  final TextEditingController _heightController = TextEditingController();
+  final TextEditingController _weightController = TextEditingController();
+
+  String? _selectedGender;
+
+  // Mapping bệnh lý
+  final Map<String, int> _diseaseMap = {
+    'Tăng huyết áp': 1,
+    'Tiểu đường': 2,
+    'Bệnh tim mạch': 3,
+    'Bệnh hô hấp': 4,
+  };
+
+  final Map<String, bool> _conditions = {
     "Tăng huyết áp": false,
     "Tiểu đường": false,
     "Bệnh tim mạch": false,
     "Bệnh hô hấp": false,
   };
 
+  // Hàm chọn ngày sinh
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2000),
+      firstDate: DateTime(1920),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _dobController.text = DateFormat('dd/MM/yyyy').format(picked);
+      });
+    }
+  }
+
+  void _handleSave() async {
+    if (_formKey.currentState!.validate()) {
+      final loginVM = context.read<LoginViewModel>();
+      final healthVM = context.read<HealthRecordViewModel>();
+      final accountId = loginVM.currentAccount?.id;
+
+      if (accountId == null) return;
+
+      // Lấy danh sách ID bệnh lý đã chọn
+      List<int> selectedIds = [];
+      _conditions.forEach((key, value) {
+        if (value) selectedIds.add(_diseaseMap[key]!);
+      });
+
+      // Tạo model profile
+      final profile = UserProfile(
+        accountId: accountId,
+        dob: _dobController.text,
+        gender: _selectedGender,
+        height: double.tryParse(_heightController.text),
+        weight: double.tryParse(_weightController.text),
+      );
+
+      bool success = await healthVM.handleSaveBasicInfo(
+        accountId: accountId,
+        profile: profile,
+        diseaseIds: selectedIds,
+      );
+
+      if (success && mounted) {
+        Navigator.pop(context); // Chỉ đóng khi lưu thành công
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      backgroundColor: Colors.white,
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Tiêu đề và nút X
-              Stack(
-                alignment: Alignment.center,
+    // PopScope chặn nút quay lại trên Android
+    return PopScope(
+      canPop: false,
+      child: Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: Colors.white,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Center(
                     child: Text(
                       'Thiết lập theo dõi sức khỏe ban đầu',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                           color: Color(0xFF379AE6),
-                          fontSize: 15,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold),
                     ),
                   ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Icon(Icons.close, color: Colors.grey),
+                  const SizedBox(height: 10),
+                  const Divider(),
+                  const SizedBox(height: 10),
+
+                  // 1. Ngày sinh
+                  _buildLabel("1. Ngày sinh"),
+                  TextFormField(
+                    controller: _dobController,
+                    readOnly: true,
+                    onTap: () => _selectDate(context),
+                    decoration: _inputStyle("Ngày/tháng/năm"),
+                    validator: (v) => (v == null || v.isEmpty) ? "Vui lòng chọn ngày sinh" : null,
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  // 2. Giới tính & 3. Chiều cao
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel("2. Giới tính"),
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedGender,
+                              dropdownColor: Colors.white,
+                              items: ["Nam", "Nữ"].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                              onChanged: (v) => setState(() => _selectedGender = v),
+                              decoration: _inputStyle("Chọn"),
+                              validator: (v) => v == null ? "Cần chọn" : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel("3. Chiều cao (cm)"),
+                            TextFormField(
+                              controller: _heightController,
+                              keyboardType: TextInputType.number,
+                              decoration: _inputStyle("VD: 170"),
+                              validator: (v) {
+                                if (v == null || v.isEmpty) return "Cần nhập";
+                                if (int.tryParse(v) == null || int.parse(v) <= 0) return "Số nguyên > 0";
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  // 4. Cân nặng
+                  _buildLabel("4. Cân nặng (kg)"),
+                  TextFormField(
+                    controller: _weightController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: _inputStyle("VD: 60.5"),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return "Vui lòng nhập cân nặng";
+                      if (double.tryParse(v) == null || double.parse(v) <= 0) return "Phải là số dương";
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  // 5. Bệnh nền
+                  _buildLabel("5. Bạn có tình trạng nào sau đây không?", isRequired: false),
+                  ..._conditions.keys.map((key) => _buildCheckboxRow(key)).toList(),
+
+                  const SizedBox(height: 20),
+
+                  // Nút Lưu duy nhất
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _handleSave,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3C83F6),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text("Lưu thông tin", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
+                  ),
+
+                  const SizedBox(height: 15),
+                  // Dòng Note bắt buộc
+                  const Text(
+                    "* Người dùng bắt buộc phải nhập chỉ số cơ bản trước khi có thể tạo bản ghi sức khỏe.",
+                    style: TextStyle(fontSize: 12, color: Colors.red, fontStyle: FontStyle.italic),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              const Divider(color: Colors.grey),
-              const SizedBox(height: 10),
-
-              // 1. Ngày sinh
-              _buildLabel("1. Ngày sinh"),
-              _buildTextField("Ngày/tháng/năm"),
-
-              const SizedBox(height: 15),
-
-              // 2. Giới tính & 3. Chiều cao
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildLabel("2. Giới tính"),
-                        _buildTextField("Nam/Nữ"),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildLabel("3. Chiều cao (cm)"),
-                        _buildTextField("170"),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 15),
-
-              // 4. Cân nặng
-              _buildLabel("4. Cân nặng (kg)"),
-              _buildTextField("60"),
-
-              const SizedBox(height: 15),
-
-              // 5. Câu hỏi tình trạng - KHÔNG CÓ DẤU *
-              _buildLabel("5. Bạn có tình trạng nào sau đây không?", isRequired: false),
-              const SizedBox(height: 5),
-              ...conditions.keys.map((String key) {
-                return _buildCheckboxRow(key);
-              }).toList(),
-
-              const SizedBox(height: 20),
-
-              // Nút Hủy và Lưu
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child:
-                    const Text("Hủy", style: TextStyle(color: Colors.black)),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3C83F6),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child:
-                    const Text("Lưu", style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // Cập nhật hàm Label để hỗ trợ dấu * đỏ
+  InputDecoration _inputStyle(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      errorStyle: const TextStyle(fontSize: 10),
+    );
+  }
+
   Widget _buildLabel(String text, {bool isRequired = true}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
@@ -146,52 +241,21 @@ class _BasicInfoModalState extends State<BasicInfoModal> {
         text: TextSpan(
           text: text,
           style: const TextStyle(fontSize: 13, color: Colors.black, fontWeight: FontWeight.w500),
-          children: [
-            if (isRequired)
-              const TextSpan(
-                text: ' *',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField(String hint) {
-    return SizedBox(
-      height: 40,
-      child: TextField(
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          children: [if (isRequired) const TextSpan(text: ' *', style: TextStyle(color: Colors.red))],
         ),
       ),
     );
   }
 
   Widget _buildCheckboxRow(String title) {
-    return SizedBox(
-      height: 35,
-      child: Row(
-        children: [
-          Transform.scale(
-            scale: 0.9,
-            child: Checkbox(
-              value: conditions[title],
-              activeColor: const Color(0xFF2028BD),
-              onChanged: (bool? value) {
-                setState(() {
-                  conditions[title] = value!;
-                });
-              },
-            ),
-          ),
-          Text(title, style: const TextStyle(fontSize: 13, color: Colors.black)),
-        ],
-      ),
+    return Row(
+      children: [
+        Checkbox(
+          value: _conditions[title],
+          onChanged: (v) => setState(() => _conditions[title] = v!),
+        ),
+        Text(title, style: const TextStyle(fontSize: 13)),
+      ],
     );
   }
 }
