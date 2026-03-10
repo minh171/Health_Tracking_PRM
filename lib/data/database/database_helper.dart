@@ -165,6 +165,32 @@ class DatabaseHelper {
     return res.isNotEmpty ? res.first : null;
   }
 
+  // Kiểm tra xem email đã tồn tại trong bảng accounts chưa
+  Future<bool> isEmailExists(String email) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'accounts',
+      where: 'email = ?',
+      whereArgs: [email.trim().toLowerCase()], // Chuẩn hóa email trước khi check
+    );
+    return res.isNotEmpty;
+  }
+
+  // Trong class DatabaseHelper
+  Future<Map<String, dynamic>?> getAccountByEmail(String email) async {
+    final db = await database;
+    final List<Map<String, dynamic>> results = await db.query(
+      'accounts',
+      where: 'email = ?',
+      whereArgs: [email],
+    );
+
+    if (results.isNotEmpty) {
+      return results.first;
+    }
+    return null;
+  }
+
   // ==========================================================
   // 2. CRUD HEALTH RECORDS
   // ==========================================================
@@ -339,59 +365,63 @@ class DatabaseHelper {
   Future<int> updateInitialProfile(int accountId, Map<String, dynamic> profileData, List<int> diseaseIds) async {
     final db = await instance.database;
 
-    // Sử dụng transaction để đảm bảo 3 bước dưới đây phải thành công cùng nhau
     return await db.transaction((txn) async {
+      // CHÚ Ý: Tạo một bản sao Map và loại bỏ các trường không mong muốn
+      final Map<String, dynamic> cleanData = Map.from(profileData);
 
-      // BƯỚC 1: CẬP NHẬT THÔNG TIN CÁ NHÂN (Chiều cao, cân nặng, ngày sinh...)
-      // Biến 'profileData' chính là Map chứa: {height, weight, dob, gender, full_name}
-      // Nó sẽ ghi đè các giá trị này vào bản ghi có account_id tương ứng
-      await txn.update('user_profile', profileData,
-          where: 'account_id = ?', whereArgs: [accountId]);
+      // 1. Tuyệt đối không update 'id' (Primary Key) vì nó gây lỗi mismatch
+      cleanData.remove('id');
 
-      // BƯỚC 2: CẬP NHẬT DANH SÁCH BỆNH NỀN
-      // - Đầu tiên: Xóa hết các bệnh nền cũ của user này (để làm sạch dữ liệu)
-      await txn.delete('user_diseases', where: 'account_id = ?', whereArgs: [accountId]);
+      // 2. Không cho phép update account_id trong SET clause (vì nó nằm ở WHERE rồi)
+      cleanData.remove('account_id');
 
-      // - Sau đó: Thêm lại danh sách ID bệnh mới mà người dùng đã chọn (vòng lặp for)
-      for (int dId in diseaseIds) {
-        await txn.insert('user_diseases', {'account_id': accountId, 'disease_id': dId});
+      // BƯỚC 1: CẬP NHẬT PROFILE
+      // Chỉ update nếu Map sau khi lọc vẫn còn dữ liệu
+      if (cleanData.isNotEmpty) {
+        await txn.update(
+            'user_profile',
+            cleanData,
+            where: 'account_id = ?',
+            whereArgs: [accountId]
+        );
       }
 
-      // BƯỚC 3: TỰ ĐỘNG CÀI ĐẶT NGƯỠNG CẢNH BÁO (ALERTS)
-      // Đây là phần thông minh nhất:
-      // Dựa trên chiều cao/cân nặng/bệnh nền vừa lưu, hàm này sẽ tự tính ra:
-      // - Cân nặng mục tiêu (BMI)
-      // - Huyết áp an toàn cho người bệnh tim/thận (nếu có)
-      // - Đường huyết an toàn...
-      // Sau đó lưu vào bảng 'alert_settings'
-      await _createDefaultAlertSettings(txn, accountId, profileData);
+      // BƯỚC 2: CẬP NHẬT BỆNH NỀN
+      await txn.delete('user_diseases', where: 'account_id = ?', whereArgs: [accountId]);
+      for (int dId in diseaseIds) {
+        await txn.insert('user_diseases', {
+          'account_id': accountId,
+          'disease_id': dId
+        });
+      }
 
-      return 1; // Trả về 1 để báo hiệu cập nhật thành công hoàn toàn
+      // BƯỚC 3: CÀI ĐẶT NGƯỠNG CẢNH BÁO
+      // Truyền cleanData hoặc profileData gốc tùy vào logic của hàm createDefaultAlertSettings
+      await _createDefaultAlertSettings(txn, accountId, cleanData, diseaseIds);
+
+      return 1; // báo thành công
     });
   }
 
-  Future<void> _createDefaultAlertSettings(Transaction txn, int accountId, Map<String, dynamic> profile) async {
-    // 1. Lấy dữ liệu đầu vào
-    double height = profile['height'] ?? 160.0; // cm
-    double weight = profile['weight'] ?? 60.0; // kg
+  Future<void> _createDefaultAlertSettings(
+      Transaction txn,
+      int accountId,
+      Map<String, dynamic> profile,
+      List<int> selectedDiseaseIds
+      ) async {
+    // 1. Lấy dữ liệu đầu vào (Bỏ biến weight thừa)
+    double height = (profile['height'] as num?)?.toDouble() ?? 160.0;
 
-    // Lấy danh sách ID bệnh nền (1: Tăng huyết áp, 2: Tiểu đường, 3: Tim mạch, 4: Hô hấp)
-    final userDiseases = await txn.query('user_diseases',
-        columns: ['disease_id'], where: 'account_id = ?', whereArgs: [accountId]);
-    List<int> dIds = userDiseases.map((e) => e['disease_id'] as int).toList();
+    /// 2. Sử dụng trực tiếp selectedDiseaseIds thay vì query lại DB
+    bool hasHypertension = selectedDiseaseIds.contains(1);
+    bool hasDiabetes = selectedDiseaseIds.contains(2);
+    bool hasHeartDisease = selectedDiseaseIds.contains(3);
+    bool hasRespiratory = selectedDiseaseIds.contains(4);
 
-    bool hasHypertension = dIds.contains(1);
-    bool hasDiabetes = dIds.contains(2);
-    bool hasHeartDisease = dIds.contains(3);
-    bool hasRespiratory = dIds.contains(4);
-
-    // --- LOGIC TÍNH TOÁN CHI TIẾT ---
-
+    // --- LOGIC TÍNH TOÁN ---
     // A. Huyết áp (mmHg)
     // Mặc định: 90-130 (Tâm thu), 60-85 (Tâm trương)
-    double sysMin = 90.0;
     double sysMax = (hasHypertension || hasHeartDisease) ? 125.0 : 130.0;
-    double diaMin = 60.0;
     double diaMax = (hasHypertension || hasHeartDisease) ? 80.0 : 85.0;
 
     // B. Đường huyết (mg/dL - Lúc đói)
@@ -399,36 +429,32 @@ class DatabaseHelper {
     double gluMin = hasDiabetes ? 80.0 : 70.0;
     double gluMax = hasDiabetes ? 130.0 : 100.0;
 
-    // C. Cân nặng (kg)
-    // Tính theo BMI chuẩn 18.5 - 23.0
-    double weightMin = 18.5 * (height / 100) * (height / 100);
-    double weightMax = 23.0 * (height / 100) * (height / 100);
+    // C: BMI chuẩn: weight = BMI * (height/100)^2
+    double hMeter = height / 100;
+    double weightMin = 18.5 * hMeter * hMeter;
+    double weightMax = 23.0 * hMeter * hMeter;
 
     // D. SpO2 (%)
     // Mặc định: 95-100. Nếu có bệnh hô hấp: 92-100
     double spo2Min = hasRespiratory ? 92.0 : 95.0;
-    double spo2Max = 100.0;
 
     // --- LƯU VÀO DATABASE ---
-    // Định nghĩa danh sách các key để insert
+    // Bước quan trọng: Xóa ngưỡng cũ của account này trước khi tạo mới để tránh bị nhân bản
+    await txn.delete('alert_settings', where: 'account_id = ?', whereArgs: [accountId]);
+
     List<Map<String, dynamic>> settings = [
-      // Huyết áp
-      {'account_id': accountId, 'key_name': 'sys_min', 'value': sysMin, 'unit': 'mmHg'},
+      {'account_id': accountId, 'key_name': 'sys_min', 'value': 90.0, 'unit': 'mmHg'},
       {'account_id': accountId, 'key_name': 'sys_max', 'value': sysMax, 'unit': 'mmHg'},
-      {'account_id': accountId, 'key_name': 'dia_min', 'value': diaMin, 'unit': 'mmHg'},
+      {'account_id': accountId, 'key_name': 'dia_min', 'value': 60.0, 'unit': 'mmHg'},
       {'account_id': accountId, 'key_name': 'dia_max', 'value': diaMax, 'unit': 'mmHg'},
-      // Đường huyết
       {'account_id': accountId, 'key_name': 'glu_min', 'value': gluMin, 'unit': 'mg/dL'},
       {'account_id': accountId, 'key_name': 'glu_max', 'value': gluMax, 'unit': 'mg/dL'},
-      // Cân nặng
       {'account_id': accountId, 'key_name': 'weight_min', 'value': double.parse(weightMin.toStringAsFixed(1)), 'unit': 'kg'},
       {'account_id': accountId, 'key_name': 'weight_max', 'value': double.parse(weightMax.toStringAsFixed(1)), 'unit': 'kg'},
-      // SpO2
       {'account_id': accountId, 'key_name': 'spo2_min', 'value': spo2Min, 'unit': '%'},
-      {'account_id': accountId, 'key_name': 'spo2_max', 'value': spo2Max, 'unit': '%'},
+      {'account_id': accountId, 'key_name': 'spo2_max', 'value': 100.0, 'unit': '%'},
     ];
 
-    // Thực hiện insert
     for (var s in settings) {
       await txn.insert('alert_settings', s);
     }
@@ -447,5 +473,26 @@ class DatabaseHelper {
     final db = await instance.database;
     return await db.update('alert_settings', {'value': newValue},
         where: 'account_id = ? AND key_name = ?', whereArgs: [accountId, keyName]);
+  }
+
+  // ==========================================================
+  // 6. DISEASE LOGIC
+  // ==========================================================
+
+  /// Lấy danh sách tên các loại bệnh nền mà người dùng đã chọn
+  Future<List<String>> getDiseasesByAccountId(int accountId) async {
+    final db = await instance.database;
+
+    // Sử dụng INNER JOIN để lấy cột 'name' từ bảng 'diseases'
+    // thông qua bảng trung gian 'user_diseases'
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT d.name 
+      FROM diseases d
+      JOIN user_diseases ud ON d.id = ud.disease_id
+      WHERE ud.account_id = ?
+    ''', [accountId]);
+
+    // Chuyển đổi từ List<Map> sang List<String>
+    return results.map((e) => e['name'] as String).toList();
   }
 }
