@@ -288,10 +288,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(width: 15),
                     // Nút Đăng xuất: Nền đỏ, chữ trắng
+                    // Nút Đăng xuất: Nền đỏ, chữ trắng
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
+                          // 1. Đóng dialog xác nhận
                           Navigator.of(context).pop();
+
+                          // 2. Gọi logic logout trong ViewModel để ProxyProvider tự dọn dẹp data người cũ
+                          context.read<LoginViewModel>().logout();
+
+                          // 3. Chuyển về màn hình Login và xóa sạch lịch sử điều hướng (Stack)
                           Navigator.pushAndRemoveUntil(
                             context,
                             MaterialPageRoute(builder: (context) => const LoginPage()),
@@ -299,13 +306,13 @@ class _SettingsPageState extends State<SettingsPage> {
                           );
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFDE3B40), // Màu đỏ
+                          backgroundColor: const Color(0xFFDE3B40),
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         child: const Text(
                           'Đăng xuất',
-                          style: TextStyle(color: Colors.white), // Chữ trắng
+                          style: TextStyle(color: Colors.white),
                         ),
                       ),
                     ),

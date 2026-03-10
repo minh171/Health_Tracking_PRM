@@ -12,6 +12,7 @@ class BasicInfoCard extends StatelessWidget {
     final loginVM = context.read<LoginViewModel>();
     final profileVM = context.watch<ProfileViewModel>();
     final profile = profileVM.userProfile;
+    final bool hasData = profile?.height != null && profile!.height! > 0;
 
     // Tự động load nếu chưa có dữ liệu (Lazy Loading)
     if (profile == null && !profileVM.isLoading) {
@@ -72,25 +73,35 @@ class BasicInfoCard extends StatelessWidget {
                       _buildInfoText("Tuổi: ${_calculateAge(profile?.dob)}"),
 
                       // 2. Giới tính
-                      _buildInfoText("Giới tính: ${profileVM.getDisplayValue(profile?.gender)}"),
+                      _buildInfoText(
+                        "Giới tính: ${profileVM.getDisplayValue(profile?.gender)}",
+                      ),
 
                       // 3. Chiều cao
-                      _buildInfoText("Chiều cao: ${profileVM.getDisplayValue(profile?.height?.toInt().toString(), unit: " cm")}"),
+                      _buildInfoText(
+                        "Chiều cao: ${profileVM.getDisplayValue(profile?.height?.toInt().toString(), unit: " cm")}",
+                      ),
 
                       // 4. Cân nặng
-                      _buildInfoText("Cân nặng: ${profileVM.getDisplayValue(profile?.weight, unit: " kg")}"),
+                      _buildInfoText(
+                        "Cân nặng: ${profileVM.getDisplayValue(profile?.weight, unit: " kg")}",
+                      ),
 
                       // 5. Tình trạng (Bệnh nền) - Dùng Row + Expanded để xuống dòng
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("Tình trạng: ", style: TextStyle(color: Colors.black, fontSize: 13)),
+                          const Text(
+                            "Tình trạng: ",
+                            style: TextStyle(color: Colors.black, fontSize: 13),
+                          ),
                           Expanded(
                             child: Text(
-                              profileVM.getDiseasesDisplay(), // Hàm lấy danh sách bệnh đã nối chuỗi
+                              profileVM
+                                  .getDiseasesDisplay(), // Hàm lấy danh sách bệnh đã nối chuỗi
                               style: const TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 13,
+                                color: Colors.black,
+                                fontSize: 13,
                               ),
                               softWrap: true, // Tự động xuống dòng
                             ),
@@ -100,19 +111,29 @@ class BasicInfoCard extends StatelessWidget {
                     ],
                   ),
 
-                  // Nút Chỉnh sửa
+
+                  // Kiểm tra xem đã có dữ liệu chưa (Ví dụ dựa vào chiều cao)
                   Positioned(
                     top: 0,
                     right: 0,
                     child: GestureDetector(
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          barrierDismissible: true,
-                          builder: (context) => const EditBasicInfoModal(),
-                        );
-                      },
-                      child: const Icon(Icons.edit, color: Color(0xFF379AE6), size: 20),
+                      onTap: hasData
+                          ? () {
+                              showDialog(
+                                context: context,
+                                barrierDismissible: true,
+                                builder: (context) =>
+                                    const EditBasicInfoModal(),
+                              );
+                            }
+                          : null, // Vô hiệu hóa khi không có data
+                      child: Icon(
+                        Icons.edit,
+                        color: hasData
+                            ? const Color(0xFF379AE6)
+                            : Colors.grey, // Đổi màu xám nếu disable
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],

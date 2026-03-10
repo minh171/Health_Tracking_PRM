@@ -10,7 +10,6 @@ import '../home/home_page.dart';
 import '../health_record/health_record_page.dart';
 import '../chart/chart_page.dart';
 import '../notification/notification_page.dart';
-import '../setting/settings_page.dart';
 import 'alert_section_group.dart';
 import 'basic_info_card.dart';
 
@@ -42,6 +41,11 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
   @override
   Widget build(BuildContext context) {
     final alertVM = context.watch<AlertSettingViewModel>();
+    final profileVM = context.watch<ProfileViewModel>();
+
+    // LOGIC: Kiểm tra xem người dùng đã nhập profile chưa
+    final bool hasBasicInfo = profileVM.userProfile != null &&
+        (profileVM.userProfile!.height ?? 0) > 0;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -55,6 +59,10 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
           children: [
             _buildBackButton(),
             const SizedBox(height: 16),
+
+            // --- BANNER CẢNH BÁO ---
+            if (!hasBasicInfo) _buildWarningBanner(),
+
             const BasicInfoCard(),
             const SizedBox(height: 16),
 
@@ -63,6 +71,7 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
               title: "Huyết Áp",
               unitLabel: "Ngưỡng cảnh báo (mmHg)",
               onReset: () => _showConfirmResetDialog(),
+              isEnabled: hasBasicInfo, // Sử dụng biến kiểm tra chỉ số ban đầu
               children: [
                 _buildField(alertVM, "Tâm thu tối thiểu", "mmHg", "sys_min"),
                 _buildField(alertVM, "Tâm thu tối đa", "mmHg", "sys_max"),
@@ -102,7 +111,8 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
             ),
 
             const SizedBox(height: 30),
-            _buildBottomButtons(context, alertVM),
+            // Truyền hasBasicInfo vào để xử lý disable nút
+            _buildBottomButtons(context, alertVM, hasBasicInfo),
             const SizedBox(height: 20),
           ],
         ),
@@ -114,18 +124,40 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
     );
   }
 
-  // Helper function để code gọn hơn
+  // Widget hiển thị Banner cảnh báo
+  Widget _buildWarningBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              "Vui lòng cập nhật Chỉ số sức khỏe ban đầu để có thể chỉnh sửa ngưỡng cảnh báo.",
+              style: TextStyle(color: Colors.orange.shade900, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildField(AlertSettingViewModel vm, String label, String unit, String key) {
     return ThresholdInputField(
       label: label,
       unit: unit,
       isEnabled: isEditing,
       controller: vm.controllers[key],
-      errorText: vm.errors[key], // Hiển thị lỗi đỏ từ VM
+      errorText: vm.errors[key],
     );
   }
-
-  // --- UI WIDGETS ---
 
   Widget _buildBackButton() {
     return GestureDetector(
@@ -133,7 +165,7 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
       child: const Row(
         children: [
           Icon(Icons.arrow_back_ios, color: Color(0xFF379AE6), size: 18),
-          Text("Quay lại", style: TextStyle(color: Color(0xFF379AE6), fontWeight: FontWeight.w500)),
+          const Text("Quay lại", style: TextStyle(color: Color(0xFF379AE6), fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -199,8 +231,6 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
     );
   }
 
-  // --- LOGIC FUNCTIONS ---
-
   Future<void> _handleResetAction() async {
     final profileVM = context.read<ProfileViewModel>();
     final alertVM = context.read<AlertSettingViewModel>();
@@ -210,10 +240,7 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
     final profile = profileVM.userProfile;
 
     final Map<String, int> diseaseMap = {
-      'Tăng huyết áp': 1,
-      'Tiểu đường': 2,
-      'Bệnh tim mạch': 3,
-      'Bệnh hô hấp': 4,
+      'Tăng huyết áp': 1, 'Tiểu đường': 2, 'Bệnh tim mạch': 3, 'Bệnh hô hấp': 4,
     };
 
     final List<int> diseaseIds = profileVM.diseases
@@ -231,34 +258,40 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
     }
   }
 
-  Widget _buildBottomButtons(BuildContext context, AlertSettingViewModel alertVM) {
+  Widget _buildBottomButtons(BuildContext context, AlertSettingViewModel alertVM, bool hasBasicInfo) {
     final accountId = context.read<LoginViewModel>().currentAccount?.id;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         ElevatedButton(
-          onPressed: () {
+          // Vô hiệu hóa nút nếu chưa có profile
+          onPressed: hasBasicInfo ? () {
             setState(() {
               isEditing = !isEditing;
-              if (!isEditing) alertVM.clearErrors(); // Xóa lỗi khi hủy chỉnh sửa
+              if (!isEditing) alertVM.clearErrors();
             });
-          },
+          } : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: isEditing ? Colors.grey[200] : const Color(0xFFF1F8FD),
+            backgroundColor: hasBasicInfo
+                ? (isEditing ? Colors.grey[200] : const Color(0xFFF1F8FD))
+                : Colors.grey.shade100,
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
           child: Text(
             isEditing ? "Hủy chỉnh sửa" : "Chỉnh sửa cài đặt",
-            style: TextStyle(color: isEditing ? Colors.black54 : const Color(0xFF379AE6)),
+            style: TextStyle(
+                color: hasBasicInfo
+                    ? (isEditing ? Colors.black54 : const Color(0xFF379AE6))
+                    : Colors.grey.shade400
+            ),
           ),
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: (isEditing && accountId != null)
+          onPressed: (isEditing && accountId != null && hasBasicInfo)
               ? () async {
-            // Chạy Validate trước khi lưu
             if (alertVM.validateSettings()) {
               bool success = await alertVM.saveAllSettings(accountId);
               if (success && mounted) {
@@ -268,15 +301,13 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
                 );
               }
             } else {
-              // Nếu có lỗi, thông báo nhẹ để người dùng chú ý các ô đỏ
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text("Vui lòng kiểm tra các ô báo lỗi"), backgroundColor: Colors.redAccent),
               );
             }
-          }
-              : null,
+          } : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF379AE6),
+            backgroundColor: (isEditing && hasBasicInfo) ? const Color(0xFF379AE6) : Colors.grey.shade300,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
           child: const Text("Lưu cấu hình", style: TextStyle(color: Colors.white)),
