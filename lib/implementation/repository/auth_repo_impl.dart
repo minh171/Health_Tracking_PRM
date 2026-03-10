@@ -14,4 +14,14 @@ class AuthRepository implements IAuthRepository {
   Future<Map<String, dynamic>?> login(String email, String password) async {
     return await _dbHelper.login(email, password);
   }
+
+  @override
+  Future<bool> checkEmailExists(String email) async {
+    return await _dbHelper.isEmailExists(email);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getAccountByEmail(String email) async {
+    return await _dbHelper.getAccountByEmail(email);
+  }
 }
