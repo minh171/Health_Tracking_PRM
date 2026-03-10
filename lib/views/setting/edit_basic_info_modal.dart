@@ -42,7 +42,6 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
   @override
   void initState() {
     super.initState();
-    // Đổ dữ liệu cũ vào form ngay khi khởi tạo
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadCurrentData();
     });
@@ -59,7 +58,6 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
         _heightController.text = profile.height?.toInt().toString() ?? "";
         _weightController.text = profile.weight?.toString() ?? "";
 
-        // Đổ dữ liệu bệnh lý (nếu chuỗi bệnh nền chứa tên bệnh nào thì tích checkbox đó)
         String currentDiseases = profileVM.getDiseasesDisplay();
         _conditions.forEach((key, value) {
           if (currentDiseases.contains(key)) {
@@ -99,28 +97,24 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
       final alertVM = context.read<AlertSettingViewModel>();
 
       final accountId = loginVM.currentAccount?.id;
-
       if (accountId == null) return;
 
-      // Lấy danh sách bệnh được chọn
       List<int> selectedIds = [];
       _conditions.forEach((key, value) {
         if (value) selectedIds.add(_diseaseMap[key]!);
       });
 
-      // CẬP NHẬT TẠI ĐÂY: Lấy tên hiện tại từ ProfileViewModel để không bị mất
       final currentFullName = profileVM.userProfile?.fullName;
 
       final profile = UserProfile(
         accountId: accountId,
-        fullName: currentFullName, // Đảm bảo tên không bị ghi đè thành null
+        fullName: currentFullName,
         dob: _dobController.text,
         gender: _selectedGender,
         height: double.tryParse(_heightController.text),
         weight: double.tryParse(_weightController.text),
       );
 
-      // 1. Lưu thông tin cơ bản vào Database
       bool success = await healthVM.handleSaveBasicInfo(
         accountId: accountId,
         profile: profile,
@@ -128,17 +122,11 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
       );
 
       if (success && mounted) {
-        // 2. Tính toán lại ngưỡng cảnh báo dựa trên chỉ số mới (Tuổi, Cân nặng, Bệnh nền)
-        // Chúng ta truyền đối tượng profile có đầy đủ tên vào đây
         await alertVM.resetToDefault(accountId, profile, selectedIds);
-
-        // 3. QUAN TRỌNG: Nạp lại Profile từ Server để đảm bảo mọi thứ đồng bộ (Tên, Bệnh nền, Chỉ số)
         await profileVM.fetchProfile(accountId);
 
         if (mounted) {
           Navigator.pop(context);
-
-          // 4. Thông báo thành công
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text("Thông tin và ngưỡng cảnh báo đã được cập nhật"),
@@ -220,9 +208,12 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
                                 controller: _heightController,
                                 keyboardType: TextInputType.number,
                                 decoration: _inputStyle("VD: 170"),
+                                // --- SỬA VALIDATE ---
                                 validator: (v) {
                                   if (v == null || v.isEmpty) return "Cần nhập";
-                                  if (int.tryParse(v) == null || int.parse(v) <= 0) return "Phải > 0";
+                                  final h = double.tryParse(v);
+                                  if (h == null) return "Phải là số";
+                                  if (h < 50 || h > 250) return "50 - 250cm";
                                   return null;
                                 },
                               ),
@@ -239,9 +230,12 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
                       controller: _weightController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: _inputStyle("VD: 60.5"),
+                      // --- SỬA VALIDATE ---
                       validator: (v) {
-                        if (v == null || v.isEmpty) return "Vui lòng nhập cân nặng";
-                        if (double.tryParse(v) == null || double.parse(v) <= 0) return "Phải là số dương";
+                        if (v == null || v.isEmpty) return "Cần nhập";
+                        final w = double.tryParse(v);
+                        if (w == null) return "Phải là số";
+                        if (w < 2 || w > 300) return "2 - 300kg";
                         return null;
                       },
                     ),
@@ -299,6 +293,7 @@ class _EditBasicInfoModalState extends State<EditBasicInfoModal> {
         borderRadius: BorderRadius.circular(8),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
+      errorStyle: const TextStyle(fontSize: 10, color: Colors.redAccent),
     );
   }
 
