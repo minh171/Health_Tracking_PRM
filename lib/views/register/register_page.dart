@@ -81,6 +81,8 @@ class _RegisterPageState extends State<RegisterPage> {
                 const Text('Tạo Tài Khoản', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 30),
 
+
+                /// Họ và Tên
                 CustomInput.buildLabel('Họ và Tên'),
                 TextFormField(
                   controller: _nameController,
@@ -98,6 +100,8 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
                 const SizedBox(height: 20),
 
+
+                /// EMAIL
                 CustomInput.buildLabel('Email'),
                 TextFormField(
                   controller: _emailController,
@@ -107,6 +111,8 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
                 const SizedBox(height: 20),
 
+
+                /// PASSWORD
                 CustomInput.buildLabel('Mật khẩu'),
                 TextFormField(
                   controller: _passwordController,
@@ -129,6 +135,8 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
                 const SizedBox(height: 20),
 
+
+                /// CONFIRM PASSWORD
                 CustomInput.buildLabel('Xác nhận mật khẩu'),
                 TextFormField(
                   controller: _confirmPasswordController,

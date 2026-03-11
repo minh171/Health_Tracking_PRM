@@ -4,4 +4,6 @@ abstract class INotificationRepository {
       );
 
   Future<int> markAsRead(int notificationId);
+
+  Future<Map<String, dynamic>?> getNotificationByRecordId(int recordId);
 }

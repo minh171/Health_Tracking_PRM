@@ -1,7 +1,5 @@
-
-import 'package:health_tracking/interface/repository/inotification_repository.dart';
-
 import '../../data/database/database_helper.dart';
+import '../../interface/repository/inotification_repository.dart';
 
 class NotificationRepository implements INotificationRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
@@ -16,5 +14,11 @@ class NotificationRepository implements INotificationRepository {
   @override
   Future<int> markAsRead(int notificationId) async {
     return await _dbHelper.markAsRead(notificationId);
+  }
+
+  // Triển khai hàm lấy thông báo theo Record ID
+  @override
+  Future<Map<String, dynamic>?> getNotificationByRecordId(int recordId) async {
+    return await _dbHelper.getNotificationByRecordId(recordId);
   }
 }

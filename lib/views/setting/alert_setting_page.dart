@@ -272,6 +272,7 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
               if (!isEditing) alertVM.clearErrors();
             });
           } : null,
+
           style: ElevatedButton.styleFrom(
             backgroundColor: hasBasicInfo
                 ? (isEditing ? Colors.grey[200] : const Color(0xFFF1F8FD))
@@ -279,6 +280,7 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
             elevation: 0,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
+
           child: Text(
             isEditing ? "Hủy chỉnh sửa" : "Chỉnh sửa cài đặt",
             style: TextStyle(
@@ -289,6 +291,7 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
           ),
         ),
         const SizedBox(width: 12),
+
         ElevatedButton(
           onPressed: (isEditing && accountId != null && hasBasicInfo)
               ? () async {
@@ -306,6 +309,8 @@ class _AlertSettingPageState extends State<AlertSettingPage> {
               );
             }
           } : null,
+
+
           style: ElevatedButton.styleFrom(
             backgroundColor: (isEditing && hasBasicInfo) ? const Color(0xFF379AE6) : Colors.grey.shade300,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

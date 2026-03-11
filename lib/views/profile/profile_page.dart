@@ -27,6 +27,8 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     // Gọi nạp dữ liệu ngay khi vào trang bằng cách sử dụng accountId từ LoginViewModel
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Context read: chỉ lấy dữ liệu
+      // KHÔNG rebuild UI
       final loginVM = context.read<LoginViewModel>();
       final profileVM = context.read<ProfileViewModel>();
 
@@ -38,6 +40,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    // watch → rebuild khi notifyListeners()
     final profileVM = context.watch<ProfileViewModel>();
     final loginVM = context.watch<LoginViewModel>();
     final profile = profileVM.userProfile;
